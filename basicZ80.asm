@@ -872,11 +872,11 @@ UsrSub:
 	EX DE,HL
 	JP (HL)
 	
-PeekSub:
-	EX DE,HL
-	LD E,(HL)
-	DEC D
-	RET
+PeekSub:		;return byte from address in DE
+	EX DE,HL	;now: HL = address, DE = 00A8
+	LD E,(HL)	;get byte from address
+	NOP 		;D is already 00
+	RET		;return result in DE
 
 RndSub:
 ; LCG 

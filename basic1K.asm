@@ -74,16 +74,19 @@ STACK_INIT equ RAM_TOP-8
 
 ; this must be on a 256 byte boundary
 VAR_SPACE equ RAM_BASE
-	; 30 words, first of which is not
-	; accessible to user, so can be
-	; used for PROG_PTR
+
+; 30 words, first of which is not
+; accessible to user, so can be
+; used for PROG_PTR
 PROG_PTR equ RAM_BASE
-	; 2 words accessible to user as variables
-	; 30 and 31 (^ and _)
+
+; 2 words accessible to user as variables
+; 30 and 31 (^ and _)
 PROG_PARSE_PTR equ RAM_BASE+60
 RNG_SEED equ RAM_BASE+62
 
 PROG_BASE equ RAM_BASE+64
+
 
         ORG 00h
 
@@ -91,24 +94,20 @@ PROG_BASE equ RAM_BASE+64
 	LD (PROG_PTR),HL
 	JR ReadyJump
 
-RST_PutChar    .macro
-	RST 08h
-    .endm
 	ORG 08h
 
+PutChar:
 ; PutChar is called frequently
 ; PutChar must return with Z set
-
-PutChar:
-	; 6850 port 1 is for char I/O
-	OUT (IODATA),A
+	OUT (IODATA),A ; 6850 port 1 is for char I/O
 
 	; Having the wait loop after the character
 	; is output will slow down I/O when running
 	; on hardware, but I can't think of a way
 	; of fitting this into 8 bytes otherwise.
 
-PutCharWaitLoop: ; address 000ah
+PutCharWaitLoop:
+  ; address 000ah
   ; TODO change these few instructions
   ; if targetting hardware
 
@@ -123,10 +122,9 @@ PutCharWaitLoop: ; address 000ah
 	        ; 0ah and 00h, so this jumps to
 	        ; PutCharWaitLoop
 
-RST_LDAXB_INXB_CPI .macro
-	RST 10h
-        .endm
 	ORG 10h
+
+LDAXB_INXB_CPI:
 	LD A,(BC); opcode 0ah
 	NOP    ; opcode 00h
 	INC BC
@@ -138,10 +136,9 @@ ExpApplyOp: ; shared code
 	EX (SP),HL
 	RET
 
-RST_CompareJump .macro
-	RST 18h
-        .endm
-	ORG 18h
+        ORG 18h
+
+CompareJump:
 ; byte after RST is compared with A
 ; if equal then jump to address on same page.
 ;
@@ -157,9 +154,6 @@ RST_CompareJump .macro
 
 ; RST 4 and 8 bytes free
 
-RST_CompareHLDE .macro
-	RST 28h
-        .endm
 	ORG 28h
 
 CompareHLDE:
@@ -177,10 +171,8 @@ CompareHLDE:
 	RET
 
 
-RST_NegateDE .macro
-        RST 30h
-        .endm
         ORG 30h
+
 NegateDE:
 	;flags are not affected
 
@@ -195,17 +187,13 @@ NegateDE:
 	LD D,A
 	RET
 
-RST_ExpEvaluate .macro
-        RST 38h
-        .endm
         ORG 38h
 
+ExpEvaluate:
 ; BC points to program
 ; DE contains value
 ; Stack is used for both operands and
 ; operators
-
-ExpEvaluate:
 
 ; ExpEvaluate must not be called
 ; from page 1, The hi byte of the return address
@@ -215,10 +203,10 @@ ExpEvaluate:
 ExpEvaluateNum:
 	; Expecting ( var integer or - sign
 	; or function call
-	RST_LDAXB_INXB_CPI
+	RST LDAXB_INXB_CPI
 	DB LeftBraceToken&0ffh
 	JR Z,ExpLeftBrace
-	RST_CompareJump
+	RST CompareJump
 	DB SubSub&0xff,(ExpNegate&0ffh)-1
 
 	; last function
@@ -269,7 +257,7 @@ ExpEvaluateOp:
 	; if L is equal to MulSub then apply it.
 	; this gives * same precedence as /
 	;MOV A,L
-	;RST_CompareJump
+	;RST CompareJump
 	;DB (MulSub&0ffh),(ExpApplyOp&0ffh)-1
 
 	LD A,L
@@ -336,12 +324,12 @@ ForSubImpl:
 	PUSH HL ; stack contains <SP> VL+1, EPL
 
 	; check that we have a 'TO' token
-	RST_LDAXB_INXB_CPI
+	RST LDAXB_INXB_CPI
 	DB ToToken&0ffh
 	CALL NZ,Error
 
-	RST_ExpEvaluate
-	RST_NegateDE
+	RST ExpEvaluate
+	RST NegateDE
 
 	PUSH DE ; stack contains <SP> -T,VL+1, EPL
 				 ; T is target
@@ -352,14 +340,14 @@ ForSubImpl:
 	LD A,(BC)
 
 	; check for optional STEP token
-	RST_CompareJump
+	RST CompareJump
 	DB StepToken&0ffh,(ForWithStep&0ffh)-1
 
 	DB 21h ; LXI H opcode eats the next 2 bytes
 ForWithStep:
 	; we have step token
 	INC BC
-	RST_ExpEvaluate
+	RST ExpEvaluate
 
 	; TODO on Z80 we can do POP AF, then
 	; push it back belown instead of DEC SP*2
@@ -395,13 +383,13 @@ FunctionCall:
   ; This must be before Error so that it
   ; can fall through
 ExpBracketedB:
-        RST_LDAXB_INXB_CPI
+        RST     LDAXB_INXB_CPI
 	DB LeftBraceToken&0ffh
 	CALL NZ,Error
 
-	RST_ExpEvaluate
+	RST ExpEvaluate
 
-	RST_LDAXB_INXB_CPI
+	RST LDAXB_INXB_CPI
 	DB RightBraceToken&0ffh
 	RET Z
 
@@ -412,7 +400,7 @@ ExpBracketedB:
 Error:
 	CALL CRLF
 	LD A,'E'
-	RST_PutChar
+	RST PutChar
 	POP DE
 	CALL PrintInteger
 
@@ -479,7 +467,7 @@ LineStartsWithInt:
 	LD HL,(PROG_PTR)
 	PUSH AF
 
-	RST_CompareJump
+	RST CompareJump
 	DB EndProgram&0ffh
 	DB (DeleteProgramLine&0ffh)-1
 
@@ -525,7 +513,7 @@ DeleteProgramLine:
 	;set HL to what we want PROG_PTR to be
 	LD D,B
 	LD E,C
-	RST_NegateDE
+	RST NegateDE
 
 	ADD HL,DE ; HL=PROG_PTR+first-middle
 
@@ -567,10 +555,10 @@ Reverse:
 ; DE = first
 
 ReverseLoop:
-	RST_CompareHLDE
+	RST CompareHLDE
 	RET Z
 	DEC HL
-	RST_CompareHLDE
+	RST CompareHLDE
 	RET Z
 
 	LD B,(HL)
@@ -584,7 +572,7 @@ ReverseLoop:
 
 
 ; GetLine sits entirely in page 1
-; good - it uses RST_CompareJump in two
+; good - it uses RST CompareJump in two
 ; places, so be careful if moving it
 ; Also it assumes ClassLookup on same page
 ; as NoCharClass
@@ -607,7 +595,7 @@ GetLine:
 	; got.
 
 	LD A,'>'
-	RST_PutChar
+	RST PutChar
 
 GetLineNoPrompt:
 
@@ -624,7 +612,7 @@ FreshStart:
 NLTest:
 	; check for newline
 	LD A,C
-	RST_CompareJump
+	RST CompareJump
 	DB 13,(NLTestTrue&0ffh)-1
 
 NextCharLoop:
@@ -645,7 +633,7 @@ NextCharLoop:
 	; away from class lookup and puts them here
 	; so can be used to change odd/even of
 	; ...Class subroutines
-	;RST_CompareJump
+	;RST CompareJump
 	;DB 34,(LC_QuoteTestTrue-1)&0ffh
 LookupClassLoop:
 	INC L
@@ -788,7 +776,7 @@ AlphaClass:
 	JR Z,NLTest
 
         LD A,L
-	RST_CompareJump
+	RST CompareJump
 	DB QuoteClassExpEnd&0ffh,(FreshStart&0ffh)-1
 
 TokenClassEnd:
@@ -812,7 +800,7 @@ TokenClassEnd:
 	AND 0e0h
 	XOR E
 
-	RST_CompareJump
+	RST CompareJump
 	DB 0feh,(Write_Shared&0ffh)-1
 
 	LD DE,TokenList
@@ -864,7 +852,7 @@ AbsSub:
 	XOR D
 	RET P
 
-	RST_NegateDE
+	RST NegateDE
 
 	; shared code. okay for this to go here
 	; because in ExpEvaluateNum, test for
@@ -902,7 +890,7 @@ LTESub:
 	; Swap operands and fall through
 	EX DE,HL
 GTESub:
-	RST_CompareHLDE
+	RST CompareHLDE
 	JR Z,BinReturn
 GTSub:
 	; Swap operands and fall through
@@ -919,13 +907,13 @@ LTSub:
 
   DB 3eh ; MVI A opcode to eat next byte
 EqualSub:
-	RST_CompareHLDE ; returns Z iff HL=DE
+	RST CompareHLDE ; returns Z iff HL=DE
 BinReturn:
 	CCF
 	DB 3eh ; MVI A opcode to eat next byte
 
 NotEqualSub:
-	RST_CompareHLDE; returns Z iff HL=DE
+	RST CompareHLDE; returns Z iff HL=DE
 	LD DE,1
 	RET NC
 	DEC DE
@@ -936,7 +924,7 @@ AddSub:
 SubSub:
 	NOP
 NegateSub:
-	RST_NegateDE
+	RST NegateDE
 	;Add DE to HL and keep in DE
 	ADD HL,DE
 	EX DE,HL
@@ -1027,7 +1015,7 @@ clcd162:
 	; Note that remainder in HL is always positive
 	RET P
 
-	RST_NegateDE
+	RST NegateDE
 
 	RET
 
@@ -1057,7 +1045,7 @@ PrintSubLoop:
 	JR C,PrintSubEnd
 
 PrintSubExpression:
-	RST_ExpEvaluate
+	RST ExpEvaluate
 	CALL PrintInteger
 
 	SCF
@@ -1066,7 +1054,7 @@ PrintSubString:
 
 	LD H,A ; A is 0 or QuoteChar
 
-	RST_LDAXB_INXB_CPI
+	RST LDAXB_INXB_CPI
 	DB CommaToken
 	JR Z,PrintSubLoop
 
@@ -1079,13 +1067,13 @@ PrintSubEnd:
 				 ; comma
 CRLF:
 	LD A,13
-	RST_PutChar
+	RST PutChar
 	LD A,10
-	RST_PutChar
+	RST PutChar
 	RET
 
 GosubSub:
-	RST_ExpEvaluate
+	RST ExpEvaluate
 	POP HL
 
 	PUSH BC
@@ -1093,7 +1081,7 @@ GosubSub:
 
 	DB 03eh ; opcode for MVI A to eat next byte
 GotoSub:
-	RST_ExpEvaluate
+	RST ExpEvaluate
 	CALL GetLineNum
 	RET Z
 	CALL Error
@@ -1112,7 +1100,7 @@ InputSub:
 	CALL GetLineNoPrompt
 
   POP BC
-  RST_ExpEvaluate
+  RST     ExpEvaluate
   POP BC
 
 	; fall through
@@ -1139,18 +1127,18 @@ LetSub:
 	PUSH HL
 
 	; Test that we have an equals sign
-	RST_LDAXB_INXB_CPI
+	RST LDAXB_INXB_CPI
 
 	DB EqualSub&0ffh
 	CALL NZ, Error
 
-	RST_ExpEvaluate
+	RST ExpEvaluate
 
 	JR POPHAssignToVar
 
 
 IfSub:
-	RST_ExpEvaluate
+	RST ExpEvaluate
 	LD A,D
 	OR E
 	RET NZ
@@ -1314,16 +1302,16 @@ OutputString:
 ;Pointer in B points to string token marker
 	INC BC
 OutputStringLoop:
-	RST_LDAXB_INXB_CPI
+	RST LDAXB_INXB_CPI
 	DB StringToken
 	JR Z,OutputStringRet
 OutputString_WithQuote:
-	RST_PutChar
+	RST PutChar
 	JR Z,OutputStringLoop
 
 ; This 20 byte routine can be moved as needed
 GetVarLocationBVar:
-        RST_LDAXB_INXB_CPI
+        RST     LDAXB_INXB_CPI
 
 	; Test that we have a var
 	db 32
@@ -1405,7 +1393,7 @@ ATNLN_RetNZ: ; shared code. Returns NZ if we know
 	RET
 
 ATNLN_String:
-	RST_LDAXB_INXB_CPI
+	RST LDAXB_INXB_CPI
 	DB StringToken
 	JR NZ, ATNLN_String
 
@@ -1422,7 +1410,7 @@ AdvanceToNextLineNum:
 ; Z clear if fell off end of program
 
 	LD A,(BC)
-	RST_CompareJump
+	RST CompareJump
 	DB EndProgram&0ffh,(ATNLN_RetNZ&0ffh)-1
 	; fell off end of program
 
@@ -1431,9 +1419,9 @@ AdvanceToNextLineNum:
 
 	INC BC
 
-	RST_CompareJump
+	RST CompareJump
 	DB IntegerToken,(ATNLN_Int&0ffh)-1
-	RST_CompareJump
+	RST CompareJump
 	DB StringToken,(ATNLN_String&0ffh)-1
 	JR AdvanceToNextLineNum
 
@@ -1441,9 +1429,9 @@ ListSubImpl:
 	LD BC,PROG_BASE
 ListLoop:
 	LD A,' '
-	RST_PutChar
+	RST PutChar
 
-	RST_LDAXB_INXB_CPI
+	RST LDAXB_INXB_CPI
 	DB EndProgram&0ffh
 	RET Z
 
@@ -1454,11 +1442,11 @@ ListLoop:
         LD L,TokenList&0ffh-1
 
 	; These need to be on same page
-	RST_CompareJump
+	RST CompareJump
 	DB StringToken,(List_String&0ffh)-1
-	RST_CompareJump
+	RST CompareJump
 	DB LinenumSub&0ffh,(List_Linenum&0ffh)-1
-        RST_CompareJump
+        RST     CompareJump
 	DB IntegerToken,(List_Integer&0ffh)-1
 
         JR C,List_Var
@@ -1482,7 +1470,7 @@ List_Token:
 List_Token_String_Loop:
   LD A,(HL)
   AND 07fh
-  RST_PutChar
+  RST     PutChar
   OR (HL)
   INC HL
   RET M
@@ -1509,7 +1497,7 @@ PrintInteger:
 
 	JP P,PrintIntegerLoop
 	LD A,'-'
-	RST_Putchar
+	RST Putchar
 
 PrintIntegerLoop:
 	; doesn't matter whether HL is -ve or +ve
@@ -1535,7 +1523,7 @@ PrintIntegerLoop:
 PrintIntegerLoop2:
 	POP AF
 	RET Z ; Z is set on return, HL<=0
-	RST_PutChar
+	RST PutChar
 	JR Z,PrintIntegerLoop2
 
 List_String:
@@ -1544,7 +1532,7 @@ List_String:
 	DB 011h ; LXI D skips 2 bytes
 List_Var:
   ADD A,'@'
-  RST_PutChar
+  RST     PutChar
   RET
 
 ; byte before TokenList must have high bit set

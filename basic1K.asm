@@ -44,12 +44,13 @@ RAM_TOP             .equ    0800h               ; 1 more than top byte of RAM
 ; Communication interface is 6850 ACIA
 IODATA              .equ    01h                 ; data register address
 IOSTAT              .equ    02h                 ; status register addres
-RDRF                .equ    01h                 ; receive data register full mask
-TDRE                .equ    02h                 ; transmit data register empty mask
+RDRF_MASK           .equ    01h                 ; receive data register full mask
+TDRE_MASK           .equ    02h                 ; transmit data register empty mask
 TX_ALWAYS_READY     .equ    1                   ; simulated 6850, TX is always ready
 
-LF                  .equ    0AH
-CR                  .equ    0DH
+; ASCII char
+LF                  .equ    0AH                 ; output has trailing CR,LF
+CR                  .equ    0DH                 ; input is terminated by CR only
 
 ; Token values
 ; 0-31 are variables (0 = @)
@@ -93,8 +94,15 @@ RNG_SEED            .equ    RAM_BASE+62
 PROG_BASE           .equ    RAM_BASE+64
 
 
-                    .org    00h
+; token followed by string with high bit of last char set
+token               .macro  sub,string
+                    .db     sub & 0FFH          ; low byte of subroutine address
+                    .dc     string              ; string with high bit of the last char set
+                    .endm
 
+
+                    .org    00h
+ColdStart:
                     LD      HL,PROG_BASE
                     LD      (PROG_PTR),HL
                     JR      ReadyJump
@@ -120,8 +128,8 @@ PutCharWaitLoop:
                     RET
                     .ELSE                       ; real ACIA HW
                     IN      A,(IOSTAT)
-                    AND     TDRE                ; char transmitted?
-                    RET     NZ                  ; yes, ready
+                    AND     TDRE_MASK           ; char transmitted?
+                    RET     NZ                  ; bit set, ready
                     .db     0c3h                ; opcode for JP nnnn
                                                 ; the following two bytes are
                                                 ; 0ah and 00h, so this jumps to
@@ -167,6 +175,7 @@ CompareJump:
 
 ; RST 4 and 8 bytes free
 
+; compare A with value and jp if equal to dest
 CP_JP_Z             .macro  value,dest
                     RST     CompareJump
                     .db     value & 0FFH
@@ -629,7 +638,7 @@ NextCharLoop:
                                                 ; This code is compatable with Z80 dongle
                                                 ; and Z80 emulator
                     IN      A,(IOSTAT)          ; 6850 status register
-                    AND     RDRF                ; 6850 receive data register full
+                    AND     RDRF_MASK           ; 6850 receive data register full
                     JR      Z,NextCharLoop      ; Z -> no, try again
                     IN      A,(IODATA)          ; get char
                     LD      C,A
@@ -1197,7 +1206,7 @@ ExecuteDirect:
                     JP      (HL)
 
 NewSub:
-                    RST     0
+                    RST     ColdStart           ; Jump to address 0
 
 ListSub:
                     JP      ListSubImpl
@@ -1276,14 +1285,21 @@ StepToken           .equ    LastStatement+2
 RightBraceToken     .equ    LastStatement+3
 CommaToken          .equ    LastStatement+4
 
+
+; class lookup entry
+cls_lkp             .macro  byte,class
+                    .db     byte
+                    .db     class & 0FFH
+                    .endm
+
 ClassLookup:
-                    .db     64,AlphaClass&0ffh
-                    .db     58,CompClass&0ffh
-                    .db     48,DigitClass&0ffh
-                    .db     35,LT0Class&0ffh
-                    .db     34,QuoteClass&0ffh
-                    .db     33,LT0Class&0ffh
-                    .db     0,FreshStart&0ffh
+                    cls_lkp 64,AlphaClass
+                    cls_lkp 58,CompClass
+                    cls_lkp 48,DigitClass
+                    cls_lkp 35,LT0Class
+                    cls_lkp 34,QuoteClass
+                    cls_lkp 33,LT0Class
+                    cls_lkp 0,FreshStart
 
 RndSubImpl:
                     EX      DE,HL
@@ -1542,76 +1558,43 @@ List_Var:
                     org     0389h
 
 TokenList:
-                    .db     QuestionMarkToken&0ffh
-                    .db     '?'+128
-                    .db     PrintSub&0ffh
-                    .db     "PRIN",'T'+128
-                    .db     LetSub&0ffh
-                    .db     "LE",'T'+128
-                    .db     GotoSub&0ffh
-                    .db     "GOT",'O'+128
-                    .db     GosubSub&0ffh
-                    .db     "GOSU",'B'+128
-                    .db     ReturnSub&0ffh
-                    .db     "RETUR",'N'+128
-                    .db     InputSub&0ffh
-                    .db     "INPU",'T'+128
-                    .db     ForSub&0ffh
-                    .db     "FO",'R'+128
-                    .db     NextSub&0ffh
-                    .db     "NEX",'T'+128
-                    .db     IfSub&0ffh
-                    .db     "I",'F'+128
-                    .db     EndSub&0ffh
-                    .db     "EN",'D'+128
+                    token   QuestionMarkToken,"?"
+                    token   PrintSub,"PRINT"
+                    token   LetSub,"LET"
+                    token   GotoSub,"GOTO"
+                    token   GosubSub,"GOSUB"
+                    token   ReturnSub,"RETURN"
+                    token   InputSub,"INPUT"
+                    token   ForSub,"FOR"
+                    token   NextSub,"NEXT"
+                    token   IfSub,"IF"
+                    token   EndSub,"END"
 
 ; Before this are keywords allowed at run-time
-                    .db     ExecuteProgram&0ffh
-                    .db     "RU",'N'+128
-                    .db     ListSub&0ffh
-                    .db     "LIS",'T'+128
-                    .db     NewSub&0ffh
-                    .db     "NE",'W'+128
+                    token   ExecuteProgram,"RUN"
+                    token   ListSub,"LIST"
+                    token   NewSub,"NEW"
 
 ; before operators are non-statement
 ; non-operator tokens
 
-                    .db     AbsSub&0ffh
-                    .db     "AB",'S'+128
-                    .db     UsrSub&0ffh
-                    .db     "US",'R'+128
-                    .db     PeekSub&0ffh
-                    .db     "PEE",'K'+128
-                    .db     RndSub&0ffh
-                    .db     "RN",'D'+128
+                    token   AbsSub,"ABS"
+                    token   UsrSub,"USR"
+                    token   PeekSub,"PEEK"
+                    token   RndSub,"RND"
 
-                    .db     ToToken&0ffh
-                    .db     "T",'O'+128
-                    .db     StepToken&0ffh
-                    .db     "STE",'P'+128
-                    .db     CommaToken
-                    .db     ','+128
-                    .db     LeftBraceToken&0ffh
-                    .db     '('+128
-                    .db     RightBraceToken&0ffh
-                    .db     ')'+128
-                    .db     EqualSub&0ffh
-                    .db     '='+128
-                    .db     NotEqualSub&0ffh
-                    .db     "<",'>'+128
-                    .db     GTESub&0ffh
-                    .db     ">",'='+128
-                    .db     LTESub&0ffh
-                    .db     "<",'='+128
-                    .db     LTSub&0ffh
-                    .db     '<'+128
-                    .db     GTSub&0ffh
-                    .db     '>'+128
-                    .db     AddSub&0ffh
-                    .db     '+'+128
-                    .db     SubSub&0ffh
-                    .db     '-'+128
-                    .db     MulSub&0ffh
-                    .db     '*'+128
-                    .db     DivSub&0ffh
-                    .db     '/'+128
+                    token   ToToken,"TO"
+                    token   StepToken,"STEP"
+                    token   CommaToken,","
+                    token   LeftBraceToken,"("
+                    token   RightBraceToken,")"
+                    token   EqualSub,"="
+                    token   NotEqualSub,"<>"
+                    token   GTESub,">="
+                    token   LTESub,"<="
+                    token   LTSub,"<"
+                    token   GTSub,">"
+                    token   AddSub,"+"
+                    token   SubSub,"-"
+                    token   MulSub,"*"
+                    token   DivSub,"/"

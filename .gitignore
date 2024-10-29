@@ -1,0 +1,17 @@
+*~
+.*~
+
+*.bak
+*.new
+*.old
+*.orig
+*.work
+
+*.bin
+*.cim
+*.z80
+*.com
+*.obj
+*.lst
+
+obj2h

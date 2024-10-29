@@ -13,7 +13,7 @@ clean:
 	rm *.cim *.lst *.hex
 
 $(H): basic1K.cim obj2h
-	./obj2h $< $(ROMSIZE) > $@
+	./obj2h $< $(ROMSIZE) rom_b1K > $@
 
 basic1K.hex: basic1K.cim
 	srec_cat $< -binary -output $@ -intel --address-length=2

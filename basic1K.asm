@@ -36,10 +36,10 @@
 
 ; For development purposes assume we have
 ; 1K ROM from 0000h-03FFh containing BASIC
-; 1K RAM from 0400h-0800h
+; 3K RAM from 0400h-1000h
 
 RAM_BASE            .equ    0400h
-RAM_TOP             .equ    0800h               ; 1 more than top byte of RAM
+RAM_TOP             .equ    1000h               ; 1 more than top byte of RAM
 
 ; Communication interface is 6850 ACIA
 IODATA              .equ    01h                 ; data register address

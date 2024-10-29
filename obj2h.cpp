@@ -1,15 +1,24 @@
+#include <cctype>
 #include <cstdio>
 #include <cstdint>
 
 
 const uint16_t bufsize=0x4000;
 
+void strtolower(char* str) {
+    while (*str) { *(str) = tolower((unsigned char)*str); ++str; }
+}
+
+void strtoupper(char* str) {
+    while (*str) { *(str) = toupper((unsigned char)*str); ++str; }
+}
+
 int main( int argc, char *argv[] ) {
     FILE *in;
     int romsize, maxsize;
     uint8_t rom[ bufsize ] = {0};
-    if( argc < 3 ) {
-        fprintf( stderr, "usage: obj2h <OBJFILE>\n" );
+    if( argc < 4 ) {
+        fprintf( stderr, "usage: obj2h <OBJFILE> <ROMSIZE> <ROMNAME>\n" );
         return -1;
     }
     if ( 1 != sscanf( argv[2], "0x%X", &maxsize ) )
@@ -26,8 +35,10 @@ int main( int argc, char *argv[] ) {
                  argv[1], romsize, maxsize );
         return -1;
     }
-    printf( "#ifndef ROM_B1K_H\n#define ROM_B1K_H\n\n" );
-    printf( "const unsigned char rom_b1k[] PROGMEM = {" );
+    strtoupper( argv[3] );
+    printf( "#ifndef %s_H\n#define %s_H\n\n", argv[3], argv[3] );
+    strtolower( argv[3] );
+    printf( "const unsigned char %s[] PROGMEM = {", argv[3] );
 
     for ( int iii = 0; iii < romsize; ++iii ) {
         if ( (iii & 0x0F) == 0 )
